@@ -5,14 +5,46 @@
 replicaCount: 1
 
 image:
-  repository: nginx
-  pullPolicy: IfNotPresent
+  repository: caleydo
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+#Variables
+MongoDBName: &MongoDBName "ordinoDB"
+MongoDBUser: &MongoDBUser "ordinoAdmin"
+MongoDBPass: &MongoDBPass "ordinoAdmin"
+
+ordino:
+  server:
+    image: caleydo/ordino_server
+    tag: starter
+    port: 9000
+    debug: true
+  web:
+    image: caleydo/ordino
+    tag: starter
+    port: 80
+  redis:
+    # ordino.redis.host -- Name of the Redis host to be used
+    host: "redis-headless"
+  mongodb:
+    # ordino.mongodb.username -- MongoDB custom user (mandatory if auth.database is set)
+    username: *MongoDBUser
+    # ordino.mongodb.password -- MongoDB custom user password
+    password: *MongoDBPass
+    # ordino.mongodb.database -- MongoDB custom database
+    database: *MongoDBName
+    # ordino.mongodb.host -- MongoDB host
+    host: "mongodb"
+    # ordino.mongodb.port -- MongoDB port
+    port: "27017"
+    # ordino.mongodb.extraArgs -- Extra arguments for the mongo connection string. Must always start with '?' e.g. '?ssl=true&ssl_ca_certs=/mongodb-certs/cert.pem'
+    extraArgs: ""
 
 serviceAccount:
   # Specifies whether a service account should be created
@@ -77,3 +109,66 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+redis:
+  # Please see all available overrides at https://github.com/helm/charts/tree/master/stable/redis
+  # redis.enabled -- Flag to control whether to deploy Redis
+  enabled: true
+  # redis.fullnameOverride -- Name override for the redis deployment
+  fullnameOverride: "redis"
+  cluster:
+    # redis.cluster.enabled -- Cluster mode for Redis
+    enabled: false
+  master:
+    persistence:
+      # redis.master.persistence.enabled -- Enable redis volume claim
+      enabled: true
+      # redis.master.persistence.size -- Size of the volume claim
+      size: 1Gi
+  # redis.usePassword -- Use password for accessing redis
+  usePassword: false
+
+postgresql:
+  # postgresql.enabled -- Flag to control whether to deploy PostgreSQL
+  enabled: true
+  persistence:
+    # postgresql.persistence.size -- Size of the PostgreSQL pvc
+    size: 1Gi
+  # postgresql.fullnameOverride -- Name override for the PostgreSQL deployment
+  fullnameOverride: postgresql
+  # postgresql.pgPass -- Password for the master PostgreSQL user.
+  # Feeds into the `ordinopostgrescredentials` secret that is provided to the PostgreSQL chart
+  pgPass: pass
+  # postgresql.existingSecret -- Name of existing secret that holds passwords for PostgreSQL
+  existingSecret: ordinopostgrescredentials
+
+mongodb:
+  # mongodb.enabled -- Flag to control whether to deploy MongoDB
+  enabled: true
+  # mongodb.fullnameOverride -- Name override for the MongoDB deployment
+  fullnameOverride: mongodb
+  persistence:
+    enabled: true
+    # mongodb.persistence.size -- Size of the MongoDB pvc
+    size: 1Gi
+  auth:
+    # mongodb.auth.enabled -- Flag to control whether to enable authentication
+    enabled: true
+    # mongodb.auth.username -- MongoDB custom user (mandatory if auth.database is set)
+    username: *MongoDBUser
+    # mongodb.auth.password -- MongoDB custom user password
+    password: *MongoDBPass
+    # mongodb.auth.database -- MongoDB custom database
+    database: *MongoDBName
+    # mongodb.auth.rootPassword -- MongoDB admin password
+    rootPassword: *MongoDBPass
+  # mongodb.initdbScripts -- List of scripts to run on first deployment of the Mongo dependency
+  initdbScripts:
+    my_init_script.sh: |
+      #!/bin/bash
+      echo "Creating mongo user..."
+      mongo  -u root -p ordinoAdmin --authenticationDatabase admin targid --eval "db.createUser({user: 'ordinoAdmin', pwd: 'ordinoAdmin', roles: [{role: 'dbOwner', db: 'targid'}]});"
+      mongo  -u root -p ordinoAdmin --authenticationDatabase admin graph --eval "db.createUser({user: 'ordinoAdmin', pwd: 'ordinoAdmin', roles: [{role: 'dbOwner', db: 'graph'}]});"
+      echo "Mongo user created."
+
+      
